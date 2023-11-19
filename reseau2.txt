@@ -1,0 +1,30 @@
+{
+  [kevin,karim,alice,paul,charlotte,gabriel,dalila],
+  [lille,lens,arras,douai,carvin,seclin],
+  [
+    kevin:{[karim,alice],lille},
+    karim:{[kevin,alice],lens},
+    alice:{[karim,kevin],arras},
+    paul:{[charlotte,gabriel],douai},
+    charlotte:{[paul,dalila],carvin},
+    gabriel:{[charlotte,paul],lens},
+    dalila:{[paul,gabriel],seclin}
+  ],
+  [
+    (lille,25,lens),
+    (lille,39,arras),
+    (lille,23,douai),
+    (lille,19,carvin),
+    (lille,3,seclin),
+    (lens,15,arras),
+    (lens,18,douai),
+    (lens,19,carvin),
+    (lens,22,seclin),
+    (arras,30,douai),
+    (arras,24,carvin),
+    (arras,35,seclin),
+    (douai,18,carvin),
+    (douai,28,seclin),
+    (carvin,15,seclin)
+  ]
+}
