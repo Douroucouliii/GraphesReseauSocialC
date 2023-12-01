@@ -1,3 +1,5 @@
+#include "pile.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -29,6 +31,11 @@ int indPersonnes;
 Personne* tab_personnes;
 int *tab_composantes;
 int *tab_composantes_fc;
+int *tab_composantes_Tarjan;
+
+int *deja_vus;
+int *rang;
+int *rang_att;
 
 
 void ajoute_personne(char *nom, char *ville){
@@ -295,7 +302,6 @@ float distance_moyenne(){
     char dist=0;
     for(int i=0; i<indPersonnes; i++){
         for(int j=0; j<indPersonnes; j++){
-            printf("%d\n", i*indPersonnes+j);
             if(&tab_personnes[i] != &tab_personnes[j]){
                 dist = distance_personne(&tab_personnes[i], &tab_personnes[j]);
                 if(dist!=-1){
@@ -341,7 +347,7 @@ void remplir_suivi_par(){
 }
 
 //attribut le num_compo à tout les voisins
-void attribuer_composante(int sommet, int num_compo){
+void attribuer_composante_connexe(int sommet, int num_compo){
     tab_composantes[sommet] = num_compo;
 
     MaillonPersonne *abo = tab_personnes[sommet].abonnements;
@@ -353,7 +359,7 @@ void attribuer_composante(int sommet, int num_compo){
             }
         }
         if(tab_composantes[ind] == -1){
-            attribuer_composante(ind, num_compo);
+            attribuer_composante_connexe(ind, num_compo);
         }
         abo=abo->suivant;
     }
@@ -367,25 +373,29 @@ void attribuer_composante(int sommet, int num_compo){
             }
         }
         if(tab_composantes[ind] == -1){
-            attribuer_composante(ind, num_compo);
+            attribuer_composante_connexe(ind, num_compo);
         }
         suivi=suivi->suivant;
     }
 }
 
-//calcule une composante
+//calcule une composante connexe
 void calcul_une_composante_connexe(int num_compo){
     for(int i=0; i<indPersonnes; i++){
         if(tab_composantes[i] == -1){
-            attribuer_composante(i, num_compo);
+            attribuer_composante_connexe(i, num_compo);
             return;
         }
     }
 }
 
-//calcule toutes les composantes
+//calcule toutes les composantes connexe
 void calcul_les_composante_connexes(){
     tab_composantes = (int *) malloc(indPersonnes *sizeof(int));
+    if(!tab_composantes){
+        perror("malloc()\n");
+        exit(EXIT_FAILURE);
+    }
     for(int i=0; i<indPersonnes; i++){
         tab_composantes[i]=-1;
     }
@@ -404,6 +414,149 @@ void calcul_les_composante_connexes(){
         }
         if(!attribue) break;
     }
+}
+
+//attribut le num_compo à tout les ascendants inter descendants du noeud
+void attribuer_composante_fortement_connexe(int sommet, int num_compo){
+    tab_composantes_fc[sommet] = num_compo;
+
+    MaillonPersonne *abo = tab_personnes[sommet].abonnements;
+    while(abo){
+        int ind;
+        for(int i=0; i<indPersonnes; i++){
+            if(&tab_personnes[i] == abo->p){
+                ind=i;
+            }
+        }
+        MaillonPersonne *suivi = tab_personnes[ind].suivi;
+        while(suivi){
+            if(suivi->p == &tab_personnes[sommet]){
+                if(tab_composantes_fc[ind] == -1){
+                    attribuer_composante_fortement_connexe(ind, num_compo);
+                }
+                break;
+            }
+            suivi=suivi->suivant;
+        }
+        abo=abo->suivant;
+    }
+}
+
+//calcule une composante fortement connexe
+void calcul_une_composante_fortement_connexe(int num_compo){
+    for(int i=0; i<indPersonnes; i++){
+        if(tab_composantes_fc[i] == -1){
+            attribuer_composante_fortement_connexe(i, num_compo);
+            return;
+        }
+    }
+}
+
+//calcule toutes les composantes connexe
+void calcul_les_composante_fortement_connexes(){
+    tab_composantes_fc = (int *) malloc(indPersonnes *sizeof(int));
+    if(!tab_composantes_fc){
+        perror("malloc()\n");
+        exit(EXIT_FAILURE);
+    }
+    for(int i=0; i<indPersonnes; i++){
+        tab_composantes_fc[i]=-1;
+    }
+
+    int num_compo = 0;
+
+    while(1){
+        int attribue = 0;
+        for(int i=0; i<indPersonnes; i++){
+            if(tab_composantes_fc[i] == -1){
+                attribue=1;
+                calcul_une_composante_fortement_connexe(num_compo);
+                num_compo++;
+                break;
+            }
+        }
+        if(!attribue) break;
+    }
+}
+
+int min(int a, int b) {
+    return (a < b) ? a : b;
+}
+
+void parcours_descendants(int s, Pile *p, int r, int num_compo){
+    push(p, s);
+    deja_vus[s]=1;
+    r++;
+    rang[s]=r;
+    rang_att[s]=r;
+    MaillonPersonne *abo = tab_personnes[s].abonnements;
+    while(abo){
+        int ind;
+        for(int i=0; i<indPersonnes; i++){
+            if(&tab_personnes[i] == abo->p){
+                ind=i;
+            }
+        }
+        if(deja_vus[ind] == -1){
+            parcours_descendants(ind, p, r, num_compo);
+            rang_att[s] = min(rang_att[s],rang_att[ind]);
+        }else if(deja_vus[ind] == 1){
+            rang_att[s] = min(rang[ind],rang_att[s]);
+        }
+        abo=abo->suivant;
+    }
+    if(rang_att[s] == rang[s]){
+        num_compo++;
+        int n;
+        while(n == s){
+            n = pop(p);
+            tab_composantes_Tarjan[n] = num_compo;
+        }
+    }
+
+}
+
+void calcul_les_cfc_Tarjan(){
+    tab_composantes_Tarjan = (int *) malloc(indPersonnes *sizeof(int));
+    if(!tab_composantes_Tarjan){
+        perror("malloc()\n");
+        exit(EXIT_FAILURE);
+    }
+    deja_vus = (int *) malloc(indPersonnes *sizeof(int));
+    if(!deja_vus){
+        perror("malloc()\n");
+        exit(EXIT_FAILURE);
+    }
+    rang = (int *) malloc(indPersonnes *sizeof(int));
+    if(!rang){
+        perror("malloc()\n");
+        exit(EXIT_FAILURE);
+    }
+    rang_att = (int *) malloc(indPersonnes *sizeof(int));
+    if(!rang_att){
+        perror("malloc()\n");
+        exit(EXIT_FAILURE);
+    }
+    for(int i=0; i<indPersonnes; i++){
+        deja_vus[i]=-1;
+    }
+    int r=0;
+    int num_compo=0;
+    Pile *p = create();
+    while(p->size < indPersonnes){
+        int n;
+        for(int i=0; i<indPersonnes; i++){
+            if(deja_vus[i] == -1){
+                n=i;
+                break;
+            }
+        }
+        parcours_descendants(n, p, r, num_compo);
+    }
+    free(deja_vus);
+    free(rang);
+    free(rang_att);
+    destroy(p);
 }
 
 void afficher_personne(Personne p){
@@ -427,13 +580,12 @@ void afficher_personne(Personne p){
         printf("%s,", suivi->p->nom);
         suivi=suivi->suivant;
     }
-    printf("%s}]\n", suivi->p->nom);
+    printf("%s}]", suivi->p->nom);
 }
 
 void afficher_tab_personne(){
     for(int i=0; i<indPersonnes; i++){
         afficher_personne(tab_personnes[i]);
-        printf("\n");
     }
 }
 
@@ -469,7 +621,7 @@ void afficher_dist_villes(){
 
 //affiche une composante (toutes les personnes de la composante) selon le numéro de la composante
 void affiche_une_composante(int num_compo){
-    printf("\nLa composante n°%d contient ces personnes :\n", num_compo);
+    printf("\nLa composante connexe n°%d contient ces personnes :\n", num_compo);
     for(int i=0; i<indPersonnes; i++){
         if(tab_composantes[i] == num_compo){
             afficher_personne(tab_personnes[i]);
@@ -477,7 +629,7 @@ void affiche_une_composante(int num_compo){
     }
 }
 
-//affiche toutes les composantes sur graphe
+//affiche toutes les composantes connexe sur graphe
 void affiche_les_composantes(){
     int max=0;
     for(int i=0; i<indPersonnes ; i++){
@@ -485,6 +637,51 @@ void affiche_les_composantes(){
     }
     for(int i=0; i<=max; i++){
         affiche_une_composante(i);
+        printf("\n");
+    }
+}
+
+//affiche une composante fortement connexe (toutes les personnes de la composante) selon le numéro de la composante
+void affiche_une_cfc(int num_compo){
+    printf("\nLa composante fortement connexe n°%d contient ces personnes :\n", num_compo);
+    for(int i=0; i<indPersonnes; i++){
+        if(tab_composantes_fc[i] == num_compo){
+            afficher_personne(tab_personnes[i]);
+        }
+    }
+}
+
+//affiche toutes les composantes fortement connexe sur graphe
+void affiche_les_cfc(){
+    int max=0;
+    for(int i=0; i<indPersonnes ; i++){
+        if(tab_composantes_fc[i]>max) max=tab_composantes_fc[i];
+    }
+    for(int i=0; i<=max; i++){
+        affiche_une_cfc(i);
+        printf("\n");
+    }
+}
+
+//affiche une composante Tarjan (toutes les personnes de la composante) selon le numéro de la composante
+void affiche_une_cfc_Tarjan(int num_compo){
+    printf("\nLa composante fortement connexe (Tarjan) n°%d contient ces personnes :\n", num_compo);
+    for(int i=0; i<indPersonnes; i++){
+        if(tab_composantes_Tarjan[i] == num_compo){
+            afficher_personne(tab_personnes[i]);
+        }
+    }
+}
+
+//affiche toutes les composantes fortement connexe sur graphe
+void affiche_les_cfc_Tarjan(){
+    int max=0;
+    for(int i=0; i<indPersonnes ; i++){
+        if(tab_composantes_Tarjan[i]>max) max=tab_composantes_Tarjan[i];
+    }
+    for(int i=0; i<=max; i++){
+        affiche_une_cfc_Tarjan(i);
+        printf("\n");
     }
 }
 
@@ -519,7 +716,7 @@ void clear_dist_villes(int ** dist){
 
 int main(){
 
-    FILE *f = fopen("reseau2.txt", "r");
+    FILE *f = fopen("reseaux/reseau2.txt", "r");
     if(!f){
         perror("Ouverture fichier");
         exit(EXIT_FAILURE);
@@ -535,6 +732,8 @@ int main(){
     parseFichier(f);
     remplir_suivi_par();
     calcul_les_composante_connexes();
+    calcul_les_composante_fortement_connexes();
+    calcul_les_cfc_Tarjan();
 
     //Test des fonctions
     printf("____________________________________________________________________________________________\n");
@@ -547,18 +746,25 @@ int main(){
     //Affichage
     printf("____________________________________________________________________________________________\n");
     afficher_tab_personne();
-    printf("____________________________________________________________________________________________\n\n");
+    printf("\n____________________________________________________________________________________________\n\n");
     afficher_villes(villes);
     printf("____________________________________________________________________________________________\n");
     afficher_dist_villes();
     printf("____________________________________________________________________________________________\n");
     affiche_les_composantes();
+    printf("\n____________________________________________________________________________________________\n");
+    affiche_les_cfc();
+    printf("\n____________________________________________________________________________________________\n");
+    affiche_les_cfc_Tarjan();
+    printf("\n\n");
 
     //Free
     clear_tab_personnes(tab_personnes);
     clear_dist_villes(distance_villes);
     free(villes);
     free(tab_composantes);
+    free(tab_composantes_fc);
+    free(tab_composantes_Tarjan);
 
     if(fclose(f)){
         perror("Fermeture fichier");
